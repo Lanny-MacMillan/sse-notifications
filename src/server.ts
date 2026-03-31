@@ -4,13 +4,13 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 
 // Import middleware
-import { corsConfig } from '@/middleware/cors';
-import { errorHandler, notFoundHandler, requestLogger } from '@/middleware/errorHandler';
+import { corsConfig } from './middleware/cors';
+import { errorHandler, notFoundHandler, requestLogger } from './middleware/errorHandler';
 
 // Import routes
-import streamRoutes from '@/routes/stream';
-import notifyRoutes from '@/routes/notify';
-import healthRoutes from '@/routes/health';
+import streamRoutes from './routes/stream';
+import notifyRoutes from './routes/notify';
+import healthRoutes from './routes/health';
 
 // Load environment variables
 dotenv.config();

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
-import { connectionManager } from '@/services/connections';
-import { authenticateUser, rateLimitSSE } from '@/middleware/auth';
+import { connectionManager } from '../services/connections';
+import { authenticateUser, rateLimitSSE } from '../middleware/auth';
 
 const router = Router();
 

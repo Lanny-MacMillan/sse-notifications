@@ -1,6 +1,6 @@
-import { prisma } from '@/lib/prisma';
+import { prisma } from '../lib/prisma';
 import { connectionManager } from './connections';
-import type { CreateNotificationRequest, NotificationResponse, Notification } from '@/types';
+import type { CreateNotificationRequest, NotificationResponse, Notification } from '../types';
 
 /**
  * Notification Service

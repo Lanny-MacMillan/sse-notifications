@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
-import { notificationService } from '@/services/notifications';
-import { authenticateApiKey, validateNotificationData } from '@/middleware/auth';
-import type { CreateNotificationRequest } from '@/types';
+import { notificationService } from '../services/notifications';
+import { authenticateApiKey, validateNotificationData } from '../middleware/auth';
+import type { CreateNotificationRequest } from '../types';
 
 const router = Router();
 

@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import { prisma } from '@/lib/prisma';
-import type { AuthUser } from '@/types';
+import { prisma } from '../lib/prisma';
+import type { AuthUser } from '../types';
 
 // Extend Request interface to include user
 declare global {

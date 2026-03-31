@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { SSEMessage, ConnectionInfo } from '@/types';
+import { SSEMessage, ConnectionInfo } from '../types';
 
 /**
  * SSE Connection Management Service

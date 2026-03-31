@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
-import { connectionManager } from '@/services/connections';
-import type { HealthStatus } from '@/types';
+import { connectionManager } from '../services/connections';
+import type { HealthStatus } from '../types';
 
 const router = Router();
 
