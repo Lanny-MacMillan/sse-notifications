@@ -8,6 +8,7 @@ export const corsConfig = cors({
     const allowedOrigins = process.env.CORS_ORIGINS?.split(',') || [
       'http://localhost:3000',
       'http://127.0.0.1:3000',
+      'https://main.d2bohgvmy343uj.amplifyapp.com',
     ];
 
     // Allow requests with no origin (mobile apps, curl, etc.)
