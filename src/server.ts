@@ -26,7 +26,8 @@ if (missingEnvVars.length > 0) {
 
 // Create Express app
 const app = express();
-const PORT = process.env.PORT || 4000;
+// const PORT = process.env.PORT || 4000;
+const PORT = Number(process.env.PORT) || 4000;
 
 // Trust proxy for accurate client IP addresses
 app.set('trust proxy', true);
@@ -80,9 +81,9 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 // Graceful shutdown handling
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ SSE Notifications Service started successfully`);
-  console.log(`✅ Server running on port ${PORT}`);
+  console.log(`✅ SSE Server running on port ${PORT}`);
   console.log(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`✅ Health check: http://localhost:${PORT}/health`);
   console.log(`✅ Detailed status: http://localhost:${PORT}/health/detailed`);
@@ -128,5 +129,7 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
   gracefulShutdown('unhandledRejection');
 });
+
+
 
 export default app;
