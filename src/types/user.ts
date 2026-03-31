@@ -13,8 +13,8 @@ export interface User {
 export interface AuthUser {
   id: string;
   auth0Sub: string;
-  email?: string;
-  name?: string;
-  picture?: string;
+  email?: string | undefined;
+  name?: string | undefined;
+  picture?: string | undefined;
   subscriptionPlan: 'free' | 'plus';
 }

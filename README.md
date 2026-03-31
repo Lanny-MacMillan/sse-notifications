@@ -2,7 +2,7 @@
 
 A standalone Node.js Server-Sent Events (SSE) service for real-time notifications in the Next Holiday application. This service provides persistent connections for instant notification delivery while working around AWS Amplify's limitations for long-running connections.
 
-## 🚀 Features
+## Features
 
 - **Real-time SSE Connections** - Persistent connections with automatic reconnection
 - **User Authentication** - Integration with Auth0 via database lookup

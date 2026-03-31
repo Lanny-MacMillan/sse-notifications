@@ -4,7 +4,7 @@
   "description": "Server-Sent Events notification service for Next Holiday app",
   "main": "dist/server.js",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
+    "dev": "tsx watch --ignore src/generated src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
     "prisma:generate": "prisma generate",

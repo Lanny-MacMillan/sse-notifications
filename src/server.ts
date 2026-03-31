@@ -81,20 +81,20 @@ app.use(errorHandler);
 
 // Graceful shutdown handling
 const server = app.listen(PORT, () => {
-  console.log(`🚀 SSE Notifications Service started successfully`);
-  console.log(`📡 Server running on port ${PORT}`);
-  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔗 Health check: http://localhost:${PORT}/health`);
-  console.log(`📊 Detailed status: http://localhost:${PORT}/health/detailed`);
+  console.log(`✅ SSE Notifications Service started successfully`);
+  console.log(`✅ Server running on port ${PORT}`);
+  console.log(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`✅ Health check: http://localhost:${PORT}/health`);
+  console.log(`✅ Detailed status: http://localhost:${PORT}/health/detailed`);
   
   if (process.env.NODE_ENV === 'development') {
-    console.log(`🔄 SSE endpoint: http://localhost:${PORT}/stream?auth0Sub=<your_auth0_sub>`);
+    console.log(`SSE endpoint: http://localhost:${PORT}/stream?auth0Sub=<your_auth0_sub>`);
   }
 });
 
 // Graceful shutdown
 const gracefulShutdown = (signal: string) => {
-  console.log(`\n📴 Received ${signal}. Starting graceful shutdown...`);
+  console.log(`\nReceived ${signal}. Starting graceful shutdown...`);
   
   server.close((err) => {
     if (err) {
@@ -102,14 +102,14 @@ const gracefulShutdown = (signal: string) => {
       process.exit(1);
     }
     
-    console.log('✅ HTTP server closed');
-    console.log('👋 SSE Notifications Service stopped gracefully');
+    console.log('⚠️ HTTP server closed');
+    console.log('⚠️ SSE Notifications Service stopped gracefully');
     process.exit(0);
   });
 
   // Force exit after 30 seconds if graceful shutdown fails
   setTimeout(() => {
-    console.error('⚠️  Forced shutdown after 30 seconds timeout');
+    console.error('⚠️ Forced shutdown after 30 seconds timeout');
     process.exit(1);
   }, 30000);
 };
@@ -120,12 +120,12 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
 // Handle uncaught exceptions and unhandled rejections
 process.on('uncaughtException', (error) => {
-  console.error('💥 Uncaught Exception:', error);
+  console.error('Uncaught Exception:', error);
   gracefulShutdown('uncaughtException');
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('💥 Unhandled Rejection at:', promise, 'reason:', reason);
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
   gracefulShutdown('unhandledRejection');
 });
 
