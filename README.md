@@ -1,23 +1,163 @@
-# SSE Notifications Service
+<div align="center">
+<h1>SSE Notifications Service</h1>
 
-A standalone Node.js Server-Sent Events (SSE) service for real-time notifications in the Next Holiday application. This service provides persistent connections for instant notification delivery while working around AWS Amplify's limitations for long-running connections.
+  <div id="badges">
+    <a href="https://nodejs.org/" target="_blank" rel="noopener noreferrer">
+      <img src="https://img.shields.io/badge/Node.js-18+-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="NodeJs"/>
+    </a>
+    <a href="https://www.typescriptlang.org/" target="_blank" rel="noopener noreferrer">
+      <img src="https://img.shields.io/badge/TypeScript-5.4-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="Typescript"/>
+    </a>
+    <a href="https://expressjs.com/" target="_blank" rel="noopener noreferrer">
+      <img src="https://img.shields.io/badge/Express-4.19-000000?style=for-the-badge&logo=express&logoColor=white" alt="Gmail Badge"/>
+    </a>
+  </div>
+  <div id="badges">
+    <a href="https://www.prisma.io/" target="_blank" rel="noopener noreferrer">
+      <img src="https://img.shields.io/badge/Prisma-5.11-2D3748?style=for-the-badge&logo=prisma&logoColor=white" alt="Prisma"/>
+    </a>
+    <a href="https://pm2.keymetrics.io/" target="_blank" rel="noopener noreferrer">
+      <img src="https://img.shields.io/badge/PM2-Production-2B037A?style=for-the-badge&logo=pm2&logoColor=white" alt="PM2"/>
+    </a>
+    <a href="https://aws.amazon.com/ec2/" target="_blank" rel="noopener noreferrer">
+      <img src="https://img.shields.io/badge/AWS-EC2-FF9900?style=for-the-badge&logo=amazonaws&logoColor=white" alt="AWS EC2"/>
+    </a>
+  </div>
+</div>
 
-## Features
+A production-ready Server-Sent Events (SSE) microservice that powers real-time notifications for [Next-holiday](https://github.com/Lanny-MacMillan/next-holiday), a holiday tracking and social sharing application. This service runs independently on AWS EC2 with PM2 process management, providing persistent connections that AWS Amplify's serverless environment cannot support.
+
+---
+
+## 📚 Table of Contents
+
+- [Why This Service Exists](#-why-this-service-exists)
+- [Architecture](#️-architecture)
+- [Features](#-features)
+- [Prerequisites](#-prerequisites)
+- [Installation](#️-installation)
+- [Integration with Next-holiday](#-integration-with-next-holiday)
+- [API Endpoints](#-api-endpoints)
+- [Production Deployment (AWS EC2 + PM2)](#-production-deployment-aws-ec2--pm2)
+- [Monitoring](#-monitoring)
+- [Security](#-security)
+- [Testing](#-testing)
+- [Troubleshooting](#-troubleshooting)
+- [Development](#-development)
+- [Related Projects](#-related-projects)
+- [Contributing](#-contributing)
+
+---
+
+---
+
+## ⚡ Quick Start
+
+For developers who want to get started immediately:
+
+```bash
+# Clone and install
+git clone <your-repo-url>
+cd sse-notifications
+npm install
+
+# Setup environment
+cp .env.example .env
+# Edit .env with your database URL and settings
+
+# Generate Prisma client (required!)
+npm run prisma:generate
+
+# Start development server
+npm run dev
+
+# Test connection
+curl -N "http://localhost:4000/stream?auth0Sub=test|123"
+```
+
+The service will be running at `http://localhost:4000`. See [Installation](#️-installation) for detailed setup.
+
+---
+
+## 🌟 Why This Service Exists
+
+Next-holiday is hosted on AWS Amplify, which is excellent for serverless Next.js apps but has a critical limitation: **it cannot maintain long-running connections required for real-time features like SSE (Server-Sent Events)**.
+
+Instead of compromising on real-time notifications or forcing users to constantly poll for updates, this dedicated SSE service was built to:
+
+1. **Maintain persistent connections** with users for instant notification delivery
+2. **Share the same database** as the Next-holiday app via Prisma ORM
+3. **Run independently** on AWS EC2 with PM2 ensuring 24/7 uptime
+4. **Handle real-time delivery** when the main app creates notifications
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Next-holiday App                        │
+│               (AWS Amplify - Next.js)                       │
+│  - User actions create notifications in shared database     │
+│  - Calls SSE service to deliver notifications in real-time  │
+└──────────────────────┬──────────────────────────────────────┘
+                       │ HTTP API Call
+                       ▼
+┌─────────────────────────────────────────────────────────────┐
+│              SSE Notifications Service                      │
+│                 (AWS EC2 + PM2)                             │
+│  - Maintains persistent SSE connections with users          │
+│  - Receives notification requests from main app             │
+│  - Sends real-time notifications via SSE streams            │
+│  - PM2 keeps service alive with automatic restarts          │
+│  - 15-second heartbeat keeps connections fresh              │
+└──────────────────────┬──────────────────────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────────────────────┐
+│                  Shared MySQL Database                      │
+│  - User table (Auth0 authentication)                        │
+│  - Notification table (created, read, dismissed states)     │
+│  - Holiday table (holiday metadata)                         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### How It Works in Practice
+
+1. **User connects**: Browser establishes SSE connection to this service via `/stream?auth0Sub=<user_id>`
+2. **Main app triggers**: When someone likes your holiday or comments, Next-holiday saves notification to database
+3. **Real-time delivery**: Next-holiday calls this service's `/api/notify` endpoint
+4. **Instant notification**: Service pushes notification through active SSE connection to user's browser
+5. **Heartbeat monitoring**: Every 15 seconds, PM2-managed process sends heartbeat to detect dead connections
+6. **Auto-recovery**: If connection drops or server restarts, client auto-reconnects
+
+## ✨ Features
 
 - **Real-time SSE Connections** - Persistent connections with automatic reconnection
 - **User Authentication** - Integration with Auth0 via database lookup
-- **Connection Management** - Automatic cleanup and heartbeat system
+- **Connection Management** - Automatic cleanup and heartbeat system (15s intervals)
 - **Database Integration** - Full Prisma ORM with MySQL support
+- **Production-Ready** - PM2 process management with auto-restart on crashes
 - **Scalable Architecture** - Memory-efficient connection storage
 - **Health Monitoring** - Comprehensive health checks and metrics
 - **TypeScript** - Full type safety throughout
+
+### Key Technical Details
+
+- **Event Stream Protocol**: Server-Sent Events (SSE) over HTTP
+- **Connection Persistence**: Long-running HTTP connections with automatic reconnection
+- **Heartbeat Frequency**: 15-second intervals to detect stale connections
+- **Process Manager**: PM2 with automatic restart and zero-downtime deployments
+- **Database**: Shared Prisma ORM connection with Next-holiday app
+- **Authentication**: Auth0 user validation via database lookup
+- **Deployment**: AWS EC2 Ubuntu with Nginx reverse proxy and Let's Encrypt SSL
+- **Memory Management**: Automatic connection cleanup on disconnect
 
 ## 📋 Prerequisites
 
 - Node.js 18+
 - MySQL 8.0+
-- Existing Next.js app with Prisma and Auth0
+- [Next-holiday](https://github.com/Lanny-MacMillan/next-holiday) app (or similar app with Auth0 and Prisma)
 - Access to shared database
+- (Production) AWS EC2 instance with Ubuntu
 
 ## 🛠️ Installation
 
@@ -85,6 +225,87 @@ npm start
 
 The service will start on `http://localhost:4000`
 
+---
+
+## 🔗 Integration with Next-holiday
+
+This service is designed to work seamlessly with the [Next-holiday](https://github.com/Lanny-MacMillan/next-holiday) application. Here's how they work together:
+
+### Main App → SSE Service Flow
+
+When a user takes an action in Next-holiday (e.g., likes a holiday, adds a comment):
+
+1. **Next-holiday creates notification** in the shared database:
+
+   ```typescript
+   // In Next-holiday app
+   const notification = await prisma.notification.create({
+     data: {
+       userId: targetUser.id,
+       type: "holiday_liked",
+       title: `${currentUser.name} liked your holiday`,
+       message: `"${holiday.name}" received a new like`,
+       entityType: "holiday",
+       entityId: holiday.id,
+       fromUserId: currentUser.id,
+     },
+   });
+   ```
+
+2. **Next-holiday calls this SSE service** to deliver in real-time:
+
+   ```typescript
+   // Immediately after creating in database
+   await fetch(`${process.env.SSE_SERVICE_URL}/api/notify`, {
+     method: "POST",
+     headers: {
+       "Content-Type": "application/json",
+       Authorization: `Bearer ${process.env.SSE_API_SECRET}`,
+     },
+     body: JSON.stringify({
+       userId: targetUser.id,
+       notification: {
+         type: "holiday_liked",
+         title: notification.title,
+         message: notification.message,
+         entityType: "holiday",
+         entityId: holiday.id,
+         fromUserId: currentUser.id,
+       },
+     }),
+   });
+   ```
+
+3. **SSE service pushes notification** to connected user's browser instantly
+4. **User sees notification** in real-time without refreshing
+
+### Frontend Connection in Next-holiday
+
+The Next-holiday app establishes an SSE connection when users log in:
+
+```typescript
+// In Next-holiday: components/NotificationProvider.tsx
+const eventSource = new EventSource(
+  `${process.env.NEXT_PUBLIC_SSE_URL}/stream?auth0Sub=${user.auth0Sub}`,
+);
+
+eventSource.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+
+  if (data.type === "notification") {
+    // Show toast/notification UI
+    toast.success(data.data.title);
+    // Update notification count
+    setNotificationCount((prev) => prev + 1);
+  }
+};
+
+// Automatic reconnection on disconnect
+eventSource.onerror = () => {
+  setTimeout(() => (eventSource = new EventSource(url)), 3000);
+};
+```
+
 ## 📡 API Endpoints
 
 ### SSE Stream Connection
@@ -100,6 +321,12 @@ Establishes persistent SSE connection for real-time notifications.
 - `auth0Sub` (required): User's Auth0 subject ID
 
 **Response:** `text/event-stream`
+
+**Event Types:**
+
+- `connection` - Initial connection confirmation
+- `notification` - New notification delivery
+- `heartbeat` - Keep-alive ping every 15 seconds (managed by PM2)
 
 ### Send Notification
 
@@ -159,133 +386,290 @@ GET /health
 - `GET /api/notifications/unread?userId=<user_id>` - Get unread notifications
 - `POST /api/notifications/read` - Mark notifications as read
 - `POST /api/notifications/dismiss` - Dismiss notifications
-- `GET /health/detailed` - Detailed system status
+- `GET /health` - Basic health status
+- `GET /health/detailed` - Detailed system status with connection metrics
 
-## 🔧 Integration with Main App
+---
 
-**How it works:** This SSE service connects to your existing database and notification table. When you create notifications in your main Next.js app, you'll also call this service to deliver them in real-time via SSE connections.
+## 🚀 Production Deployment (AWS EC2 + PM2)
 
-### 1. Update Notification Creation
+This service runs on AWS EC2 with **PM2 process manager**, which provides:
 
-In your Next.js app, **after** creating notifications in your existing database, call the SSE service:
+- **Auto-restart** on crashes or uncaught exceptions
+- **Zero-downtime restarts** during deployments
+- **Log management** and monitoring
+- **Startup scripts** to survive server reboots
+- **Resource monitoring** (CPU, memory usage)
 
-```typescript
-// After saving notification to database
-const notificationResponse = await fetch("http://localhost:4000/api/notify", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${process.env.SSE_API_SECRET}`,
-  },
-  body: JSON.stringify({
-    userId: notification.userId,
-    notification: {
-      type: notification.type,
-      title: notification.title,
-      message: notification.message,
-      entityType: notification.entityType,
-      entityId: notification.entityId,
-      holidayId: notification.holidayId,
-      fromUserId: notification.fromUserId,
-    },
-  }),
-});
+### PM2 Benefits for SSE Service
+
+Unlike traditional serverless or container orchestration, PM2 is ideal for SSE because:
+
+1. **Persistent processes** - SSE requires long-running connections that stay alive
+2. **Immediate restart** - If the process crashes, PM2 restarts it in milliseconds
+3. **Connection recovery** - Clients auto-reconnect seamlessly on restart
+4. **Heartbeat reliability** - PM2 ensures the 15-second heartbeat never stops
+5. **Simple monitoring** - `pm2 logs` and `pm2 monit` give instant visibility
+
+### Quick PM2 Commands
+
+```bash
+# Start the service (on EC2)
+pm2 start dist/server.js --name sse-notifications
+
+# View live logs
+pm2 logs sse-notifications
+
+# Monitor resources in real-time
+pm2 monit
+
+# Restart after deployment
+pm2 restart sse-notifications
+
+# View process status
+pm2 list
+
+# Auto-start on server reboot
+pm2 startup
+pm2 save
 ```
 
-### 2. Frontend SSE Connection
+### AWS EC2 with Nginx Reverse Proxy (Recommended)
 
-Replace your current SSE implementation:
+This service is deployed on AWS EC2 Ubuntu with Nginx as a reverse proxy and Let's Encrypt SSL certificates.
 
-```typescript
-// components/NotificationProvider.tsx
-const eventSource = new EventSource(
-  `http://localhost:4000/stream?auth0Sub=${user.auth0Sub}`,
-);
+#### Prerequisites
 
-eventSource.onmessage = (event) => {
-  const data = JSON.parse(event.data);
+- AWS EC2 Ubuntu instance
+- Domain configured in GoDaddy (A record pointing to EC2 IP)
+- Security Group with ports 22, 80, and 443 open
 
-  switch (data.type) {
-    case "connection":
-      console.log("Connected to SSE stream");
-      break;
-    case "notification":
-      // Handle new notification
-      setNotifications((prev) => [data.data, ...prev]);
-      break;
-    case "heartbeat":
-      // Connection is alive
-      break;
-  }
-};
+#### 1. AWS Security Group Configuration
 
-eventSource.onerror = (error) => {
-  console.error("SSE connection error:", error);
-  // Handle reconnection
-};
+Configure inbound rules in your EC2 Security Group:
+
+```
+Port 22   (SSH)   - 0.0.0.0/0 or your IP
+Port 80   (HTTP)  - 0.0.0.0/0
+Port 443  (HTTPS) - 0.0.0.0/0
 ```
 
-### 3. Environment Variables
+#### 2. Install Nginx
 
-Add to your main app's environment:
+```bash
+sudo apt update
+sudo apt install nginx -y
+sudo systemctl enable nginx
+sudo systemctl start nginx
+```
+
+#### 3. Configure Nginx Reverse Proxy
+
+Create Nginx configuration file:
+
+```bash
+sudo nano /etc/nginx/sites-available/sse
+```
+
+Add configuration:
+
+```nginx
+server {
+    listen 80;
+    server_name api.yourdomain.com;
+
+    location / {
+        proxy_pass http://localhost:4000;
+        proxy_http_version 1.1;
+
+        # Headers
+        proxy_set_header Host $host;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection '';
+        proxy_set_header Cache-Control no-cache;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # SSE specific settings
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 3600s;
+        chunked_transfer_encoding off;
+    }
+}
+```
+
+Enable the site:
+
+```bash
+sudo ln -s /etc/nginx/sites-available/sse /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+#### 4. Install SSL Certificate (Let's Encrypt)
+
+```bash
+sudo apt install certbot python3-certbot-nginx -y
+sudo certbot --nginx -d api.yourdomain.com
+```
+
+Choose redirect to HTTPS when prompted.
+
+#### 5. Deploy Application with PM2
+
+Build and start the service:
+
+```bash
+# Install PM2 globally
+npm install -g pm2
+
+# Build the application
+npm run build
+
+# Start with PM2
+pm2 start dist/server.js --name sse-notifications
+pm2 save
+pm2 startup
+```
+
+Run the command output by `pm2 startup` to enable auto-restart on reboot.
+
+#### 6. Update Frontend Environment
+
+Set your frontend environment variable to point to your EC2 instance:
 
 ```env
-# In your main Next.js app
-SSE_SERVICE_URL=http://localhost:4000
+# In Next-holiday app
+NEXT_PUBLIC_SSE_URL=https://api.yourdomain.com
 SSE_API_SECRET=your-secure-api-secret-key
 ```
 
-## Production Deployment
+#### Monitoring Your Production Service
 
-### Cloud Platforms
-
-**AWS EC2/Elastic Beanstalk:**
+PM2 provides several ways to monitor the service health:
 
 ```bash
-# Deploy Node.js application directly
-# Use Application Load Balancer with sticky sessions for SSE
+# SSH into EC2
+ssh -i ~/.ssh/your-key.pem ubuntu@your-ec2-ip
+
+# Check if service is running
+pm2 list
+
+# View recent logs
+pm2 logs sse-notifications --lines 50
+
+# Monitor CPU and memory in real-time
+pm2 monit
+
+# Check service health endpoint
+curl http://localhost:4000/health
 ```
 
-**Google Cloud Run:**
+The service sends a **15-second heartbeat** to all connected clients, which PM2 ensures runs continuously. If a client doesn't receive a heartbeat, it automatically reconnects.
 
-```yaml
-# Deploy as Node.js service
-# Configure for persistent connections
-```
-
-**Railway:**
+#### Common Nginx Commands
 
 ```bash
-# Automatic Node.js detection
-# Uses package.json start script
+# Test configuration
+sudo nginx -t
+
+# Reload Nginx
+sudo systemctl reload nginx
+
+# Restart Nginx
+sudo systemctl restart nginx
+
+# Check status
+sudo systemctl status nginx
+
+# View error logs
+sudo tail -f /var/log/nginx/error.log
+
+# View access logs
+sudo tail -f /var/log/nginx/access.log
 ```
 
-**Render/Vercel:**
+#### Common PM2 Commands
 
 ```bash
-# Node.js deployment
-# Configure environment variables
+# View running processes
+pm2 list
+
+# View logs (see heartbeats, connections, notifications)
+pm2 logs sse-notifications
+
+# Restart service (zero-downtime)
+pm2 restart sse-notifications
+
+# Stop service
+pm2 stop sse-notifications
+
+# Monitor CPU/memory in real-time
+pm2 monit
+
+# Delete process from PM2
+pm2 delete sse-notifications
+
+# Ensure service starts on server reboot
+pm2 startup  # Run once, then execute the command it outputs
+pm2 save     # Save current process list
 ```
 
-### Load Balancing
+### PM2 Process Details
 
-For multiple instances, use sticky sessions:
+When running with PM2, you'll see output like:
+
+```
+┌─────┬──────────────────────┬─────────┬─────────┬──────────┬────────┐
+│ id  │ name                 │ status  │ restart │ uptime   │ cpu    │
+├─────┼──────────────────────┼─────────┼─────────┼──────────┼────────┤
+│ 0   │ sse-notifications    │ online  │ 2       │ 5D       │ 0.2%   │
+└─────┴──────────────────────┴─────────┴─────────┴──────────┴────────┘
+```
+
+This shows:
+
+- **Status**: `online` means service is running
+- **Restart count**: How many times PM2 has auto-restarted (after crashes or deployments)
+- **Uptime**: How long since last restart
+- **CPU/Memory**: Resource usage
+
+The service maintains persistent SSE connections and sends heartbeats every 15 seconds to detect dead connections.
+
+### Load Balancing (Multi-Instance Setup)
+
+For multiple instances, configure Nginx upstream with sticky sessions:
 
 ```nginx
-# nginx.conf
 upstream sse-backend {
-    ip_hash;  # Sticky sessions for SSE
-    server sse-1:4000;
-    server sse-2:4000;
+    ip_hash;  # Sticky sessions required for SSE
+    server 10.0.1.10:4000;
+    server 10.0.1.11:4000;
 }
 
 server {
+    listen 443 ssl http2;
+    server_name api.yourdomain.com;
+
+    ssl_certificate /etc/letsencrypt/live/api.yourdomain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/api.yourdomain.com/privkey.pem;
+
     location / {
         proxy_pass http://sse-backend;
         proxy_http_version 1.1;
-        proxy_set_header Connection "";
-        proxy_cache_bypass 1;
-        proxy_no_cache 1;
+        proxy_set_header Host $host;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection '';
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 3600s;
+        chunked_transfer_encoding off;
     }
 }
 ```
@@ -311,6 +695,20 @@ The service provides structured logging for:
 - Notification delivery status
 - Error tracking
 - Performance metrics
+- Heartbeat intervals (every 15 seconds)
+
+View logs with PM2:
+
+```bash
+# Real-time logs
+pm2 logs sse-notifications
+
+# Last 100 lines
+pm2 logs sse-notifications --lines 100
+
+# Error logs only
+pm2 logs sse-notifications --err
+```
 
 ### Metrics
 
@@ -441,13 +839,47 @@ npm run prisma:studio   # Open Prisma Studio
 
 ISC License - see LICENSE file for details.
 
+---
+
+## 🔗 Related Projects
+
+This service is part of the **Next-holiday** ecosystem:
+
+- **[Next-holiday](https://github.com/Lanny-MacMillan/next-holiday)** - Main application for tracking and sharing holidays
+  - Built with Next.js 14, TypeScript, Prisma, and Auth0
+  - Hosted on AWS Amplify (serverless)
+  - Shares the same MySQL database with this SSE service
+  - Calls this service for real-time notification delivery
+
 ## 🤝 Contributing
 
+Contributions are welcome! This project uses:
+
+- **TypeScript** for type safety
+- **Express** for HTTP server
+- **Prisma** for database access
+- **PM2** for process management in production
+
+### Development Workflow
+
 1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+2. Clone your fork: `git clone https://github.com/your-username/sse-notifications.git`
+3. Create a feature branch: `git checkout -b feature/amazing-feature`
+4. Install dependencies: `npm install`
+5. Set up your `.env` file (see Installation section)
+6. Start development server: `npm run dev`
+7. Make your changes and test thoroughly
+8. Commit your changes: `git commit -m 'Add amazing feature'`
+9. Push to your branch: `git push origin feature/amazing-feature`
+10. Open a Pull Request
+
+### Code Standards
+
+- TypeScript strict mode enabled
+- ESLint for code quality
+- Follow existing patterns for consistency
+- Add JSDoc comments for public functions
+- Test endpoints with provided curl commands
 
 ## 📞 Support
 
