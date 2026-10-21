@@ -3,8 +3,15 @@
 ## Connect to EC2
 
 ```bash
-# this shows command in relation to normal stored pem key
-ssh -i ~/.ssh/sse-server-key.pem ubuntu@18.222.159.163
+# Key pair is stored at ~/.ssh/sse-key.pem (chmod 400)
+# Use the instance's current public DNS (it changes if the instance is stopped/started)
+ssh -i ~/.ssh/sse-key.pem ubuntu@<ec2-public-dns>
+
+# Copy a local .env to the server
+scp -i ~/.ssh/sse-key.pem .env ubuntu@<ec2-public-dns>:~/sse-notifications/.env
+
+# SSH is allowed from one IP only; if it times out, your IP changed. Add the new one:
+# aws ec2 authorize-security-group-ingress --group-id <sse-sg> --protocol tcp --port 22 --cidr <your-ip>/32
 ```
 
 ## Initial Setup & Build
@@ -69,6 +76,9 @@ pm2 logs sse-notifications
 # Restart application (for updates)
 pm2 restart sse-notifications
 
+# Restart and reload changed .env values
+pm2 restart sse-notifications --update-env
+
 # Stop application
 pm2 stop sse-notifications
 
@@ -99,11 +109,26 @@ curl -N http://localhost:4000/health
 
 ### From External (Local Machine/Postman)
 
+Port 4000 is only open to CloudFront, so test through the CloudFront URL:
+
 ```bash
-GET http://<EC2_PUBLIC_IP>:4000/health
+GET https://<distribution>.cloudfront.net/health
 ```
 
 ## Troubleshooting
+
+### CloudFront returns 504
+
+The origin isn't reachable. On the server check `pm2 list` (should be `online`, restart count not climbing), `curl localhost:4000/health`, and that the security group allows port 4000 from the CloudFront origin-facing prefix list. If the instance was stopped/started, update the CloudFront origin to its new public DNS.
+
+### PM2 restart loop: Prisma "could not locate the Query Engine"
+
+`prisma/schema.prisma` must contain `output = "../src/generated/prisma"`. Then:
+
+```bash
+npx prisma generate && npm run build && pm2 restart sse-notifications
+pm2 logs sse-notifications --lines 40 --nostream
+```
 
 ### Check What's Using Port 4000
 

@@ -148,7 +148,7 @@ Instead of compromising on real-time notifications or forcing users to constantl
 - **Process Manager**: PM2 with automatic restart and zero-downtime deployments
 - **Database**: Shared Prisma ORM connection with Next-holiday app
 - **Authentication**: Auth0 user validation via database lookup
-- **Deployment**: AWS EC2 Ubuntu with Nginx reverse proxy and Let's Encrypt SSL
+- **Deployment**: AWS EC2 Ubuntu behind CloudFront (HTTPS), run by PM2
 - **Memory Management**: Automatic connection cleanup on disconnect
 
 ## 📋 Prerequisites
@@ -187,7 +187,7 @@ PORT=4000
 NODE_ENV=development
 
 # CORS (include your main app's domain)
-CORS_ORIGINS="http://localhost:3000,https://yourdomain.com"
+CORS_ORIGINS="http://localhost:3000,https://main.xxxx.amplifyapp.com"
 
 # Security (generate a strong secret)
 API_SECRET="your-secure-api-secret-key"
@@ -434,162 +434,123 @@ pm2 startup
 pm2 save
 ```
 
-### AWS EC2 with Nginx Reverse Proxy (Recommended)
+### AWS EC2 with CloudFront (HTTPS)
 
-This service is deployed on AWS EC2 Ubuntu with Nginx as a reverse proxy and Let's Encrypt SSL certificates.
-
-#### Prerequisites
-
-- AWS EC2 Ubuntu instance
-- Domain configured in GoDaddy (A record pointing to EC2 IP)
-- Security Group with ports 22, 80, and 443 open
-
-#### 1. AWS Security Group Configuration
-
-Configure inbound rules in your EC2 Security Group:
+This service runs on a small AWS EC2 Ubuntu instance (t4g.micro) behind a CloudFront distribution. CloudFront provides the HTTPS URL that browsers require (an `http://` EventSource is blocked as mixed content from an HTTPS site), so no domain, certificate or Nginx is needed.
 
 ```
-Port 22   (SSH)   - 0.0.0.0/0 or your IP
-Port 80   (HTTP)  - 0.0.0.0/0
-Port 443  (HTTPS) - 0.0.0.0/0
+Browser / Next-holiday (Amplify) ──HTTPS──▶ CloudFront ──HTTP :4000──▶ EC2 (PM2 → node dist/server.js) ──▶ MySQL (RDS)
 ```
 
-#### 2. Install Nginx
+#### 1. Security group
+
+Create a security group for the instance with these inbound rules:
+
+```
+Port 22   (SSH)   - your IP only (x.x.x.x/32)
+Port 4000 (HTTP)  - CloudFront origin-facing managed prefix list only
+                    (com.amazonaws.global.cloudfront.origin-facing)
+```
+
+Also allow this security group on port 3306 in the RDS database's security group so the service can reach MySQL.
+
+#### 2. Launch the instance
+
+Launch an Ubuntu 22.04 instance (arm64 `t4g.micro` is enough) with a key pair, in the same VPC as the database, with a public IP. Store the key at `~/.ssh/sse-key.pem` and `chmod 400` it.
+
+#### 3. Install and build
+
+SSH in, then:
 
 ```bash
-sudo apt update
-sudo apt install nginx -y
-sudo systemctl enable nginx
-sudo systemctl start nginx
-```
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs git
+sudo npm install -g pm2
 
-#### 3. Configure Nginx Reverse Proxy
-
-Create Nginx configuration file:
-
-```bash
-sudo nano /etc/nginx/sites-available/sse
-```
-
-Add configuration:
-
-```nginx
-server {
-    listen 80;
-    server_name api.yourdomain.com;
-
-    location / {
-        proxy_pass http://localhost:4000;
-        proxy_http_version 1.1;
-
-        # Headers
-        proxy_set_header Host $host;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection '';
-        proxy_set_header Cache-Control no-cache;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # SSE specific settings
-        proxy_buffering off;
-        proxy_cache off;
-        proxy_read_timeout 3600s;
-        chunked_transfer_encoding off;
-    }
-}
-```
-
-Enable the site:
-
-```bash
-sudo ln -s /etc/nginx/sites-available/sse /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-#### 4. Install SSL Certificate (Let's Encrypt)
-
-```bash
-sudo apt install certbot python3-certbot-nginx -y
-sudo certbot --nginx -d api.yourdomain.com
-```
-
-Choose redirect to HTTPS when prompted.
-
-#### 5. Deploy Application with PM2
-
-Build and start the service:
-
-```bash
-# Install PM2 globally
-npm install -g pm2
-
-# Build the application
+git clone https://github.com/Lanny-MacMillan/sse-notifications.git ~/sse-notifications
+cd ~/sse-notifications
+# copy your .env to the server first (scp), see Environment Configuration
+npm install
+npx prisma generate
 npm run build
+```
 
-# Start with PM2
+Production `.env` values: `NODE_ENV=production`, `PORT=4000`, the shared `DATABASE_URL`, `CORS_ORIGINS` set to the Next-holiday origin (no trailing slash, comma-separated, e.g. `http://localhost:3000,https://main.xxxx.amplifyapp.com`), and `API_SECRET` from `openssl rand -hex 32`.
+
+#### 4. Run with PM2
+
+```bash
 pm2 start dist/server.js --name sse-notifications
 pm2 save
-pm2 startup
+pm2 startup   # run the sudo command it prints, then pm2 save again
+curl http://localhost:4000/health
 ```
 
-Run the command output by `pm2 startup` to enable auto-restart on reboot.
+#### 5. CloudFront distribution
 
-#### 6. Update Frontend Environment
+Create a distribution with the instance's public DNS as a custom origin:
 
-Set your frontend environment variable to point to your EC2 instance:
+- **Origin protocol:** HTTP only, port 4000
+- **Origin response timeout:** 60s (the 15s heartbeat keeps connections well inside it)
+- **Viewer protocol policy:** redirect HTTP to HTTPS
+- **Allowed methods:** GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE
+- **Cache policy:** `CachingDisabled` (`4135ea2d-6df8-44a3-9df3-4b5a84be39ad`)
+- **Origin request policy:** `AllViewer` (`216adef6-5c7f-47e4-b989-5492eafa07d3`), which forwards the `auth0Sub` query string, `Origin` and `Authorization`
+- **Compression:** off
+
+The distribution's `https://xxxx.cloudfront.net` domain is the public URL.
+
+> The EC2 public DNS name changes if the instance is stopped and started. Attach an Elastic IP (or update the CloudFront origin) if you stop it.
+
+#### 6. Update Next-holiday environment
+
+Set these in the Amplify environment variables (no quotes) and redeploy:
 
 ```env
-# In Next-holiday app
-NEXT_PUBLIC_SSE_URL=https://api.yourdomain.com
-SSE_API_SECRET=your-secure-api-secret-key
+SSE_SERVICE_URL=https://xxxx.cloudfront.net
+NEXT_PUBLIC_SSE_SERVICE_URL=https://xxxx.cloudfront.net
+SSE_API_SECRET=<same value as API_SECRET on the server>
+```
+
+#### 7. Verify
+
+```bash
+# Terminal 1: stays open, prints a connection message with your DB userId, then heartbeats
+curl -N "https://xxxx.cloudfront.net/stream?auth0Sub=auth0%7Ctest"
+
+# Terminal 2: userId is the DB id from the connection message, not the auth0 sub
+curl -X POST https://xxxx.cloudfront.net/api/notify \
+  -H "Authorization: Bearer $SECRET" -H "Content-Type: application/json" \
+  -d '{"userId":"<db user id>","notification":{"id":"1","type":"test","title":"hi","message":"hi"}}'
+
+# Wrong secret should return 401
+curl -s -o /dev/null -w "%{http_code}\n" -X POST https://xxxx.cloudfront.net/api/notify \
+  -H "Authorization: Bearer wrong" -H "Content-Type: application/json" -d '{}'
+```
+
+Notifications are routed by the **database user id**: the stream looks up the `auth0Sub` in the `users` table and keys the connection by that user's id, which is what Next-holiday sends as `userId` to `/api/notify`.
+
+#### Updating the service
+
+```bash
+ssh -i ~/.ssh/sse-key.pem ubuntu@<ec2-public-dns>
+cd ~/sse-notifications
+git pull
+npx prisma generate
+npm run build
+pm2 restart sse-notifications --update-env
 ```
 
 #### Monitoring Your Production Service
 
-PM2 provides several ways to monitor the service health:
-
 ```bash
-# SSH into EC2
-ssh -i ~/.ssh/your-key.pem ubuntu@your-ec2-ip
-
-# Check if service is running
 pm2 list
-
-# View recent logs
 pm2 logs sse-notifications --lines 50
-
-# Monitor CPU and memory in real-time
 pm2 monit
-
-# Check service health endpoint
 curl http://localhost:4000/health
 ```
 
 The service sends a **15-second heartbeat** to all connected clients, which PM2 ensures runs continuously. If a client doesn't receive a heartbeat, it automatically reconnects.
-
-#### Common Nginx Commands
-
-```bash
-# Test configuration
-sudo nginx -t
-
-# Reload Nginx
-sudo systemctl reload nginx
-
-# Restart Nginx
-sudo systemctl restart nginx
-
-# Check status
-sudo systemctl status nginx
-
-# View error logs
-sudo tail -f /var/log/nginx/error.log
-
-# View access logs
-sudo tail -f /var/log/nginx/access.log
-```
 
 #### Common PM2 Commands
 
@@ -779,6 +740,15 @@ curl http://localhost:4000/health
 - Verify auth0Sub parameter format
 - Check if user exists in database
 - Validate API secret for internal calls
+
+**504 from CloudFront:**
+
+- CloudFront can't reach the origin: check `pm2 list` shows `online`, `curl localhost:4000/health` works on the server, and the instance security group allows port 4000 from the CloudFront prefix list
+- If the instance was stopped and started, its public DNS changed; update the CloudFront origin
+
+**Prisma "could not locate the Query Engine" crash loop:**
+
+- `prisma/schema.prisma` must set `output = "../src/generated/prisma"` (the app imports `../generated/prisma`); then run `npx prisma generate && npm run build` on the server so the client matches the server's platform
 
 **Memory Issues:**
 
