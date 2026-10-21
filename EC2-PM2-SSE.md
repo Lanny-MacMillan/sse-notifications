@@ -115,6 +115,10 @@ Port 4000 is only open to CloudFront, so test through the public URL:
 GET https://api.sse-notifs.com/health
 ```
 
+### Uptime Monitoring
+
+UptimeRobot (free plan) checks `https://api.sse-notifs.com/health` every 5 minutes and sends email and mobile push alerts on down and recovery. If it alerts after the instance was stopped and started, update the CloudFront origin to the new public DNS (see Troubleshooting).
+
 ## Troubleshooting
 
 ### CloudFront returns 504
