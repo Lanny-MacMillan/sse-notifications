@@ -647,6 +647,16 @@ curl http://localhost:4000/health
 curl http://localhost:4000/health/detailed
 ```
 
+### Uptime Monitoring
+
+Production is monitored externally with [UptimeRobot](https://uptimerobot.com) (free plan):
+
+- **Monitor:** HTTP(s) check on `https://api.sse-notifs.com/health` every 5 minutes
+- **Alerts:** email plus push notifications through the UptimeRobot mobile app, on both down and recovery
+- **Scope:** confirms the service responds through CloudFront. It does not verify SSE streaming itself, so use the `/stream` check under [Verify](#7-verify) after deploys
+
+After stopping and starting the EC2 instance, `/health` stays down until the CloudFront origin is updated to the new public DNS, and the monitor will alert until then.
+
 ### Logging
 
 The service provides structured logging for:
