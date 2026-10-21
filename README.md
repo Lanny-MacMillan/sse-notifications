@@ -498,7 +498,7 @@ Create a distribution with the instance's public DNS as a custom origin:
 - **Origin request policy:** `AllViewer` (`216adef6-5c7f-47e4-b989-5492eafa07d3`), which forwards the `auth0Sub` query string, `Origin` and `Authorization`
 - **Compression:** off
 
-The distribution's `https://xxxx.cloudfront.net` domain is the public URL.
+The distribution's `https://xxxx.cloudfront.net` domain works as the public URL. For a cleaner production URL, attach a custom domain (e.g. `https://api.sse-notifs.com`): request an ACM certificate in `us-east-1`, add the domain as an alternate domain name on the distribution, and point a DNS `CNAME` at the `cloudfront.net` domain. The examples below use `https://api.sse-notifs.com`.
 
 > The EC2 public DNS name changes if the instance is stopped and started. Attach an Elastic IP (or update the CloudFront origin) if you stop it.
 
@@ -507,8 +507,8 @@ The distribution's `https://xxxx.cloudfront.net` domain is the public URL.
 Set these in the Amplify environment variables (no quotes) and redeploy:
 
 ```env
-SSE_SERVICE_URL=https://xxxx.cloudfront.net
-NEXT_PUBLIC_SSE_SERVICE_URL=https://xxxx.cloudfront.net
+SSE_SERVICE_URL=https://api.sse-notifs.com
+NEXT_PUBLIC_SSE_SERVICE_URL=https://api.sse-notifs.com
 SSE_API_SECRET=<same value as API_SECRET on the server>
 ```
 
@@ -516,15 +516,15 @@ SSE_API_SECRET=<same value as API_SECRET on the server>
 
 ```bash
 # Terminal 1: stays open, prints a connection message with your DB userId, then heartbeats
-curl -N "https://xxxx.cloudfront.net/stream?auth0Sub=auth0%7Ctest"
+curl -N "https://api.sse-notifs.com/stream?auth0Sub=auth0%7Ctest"
 
 # Terminal 2: userId is the DB id from the connection message, not the auth0 sub
-curl -X POST https://xxxx.cloudfront.net/api/notify \
+curl -X POST https://api.sse-notifs.com/api/notify \
   -H "Authorization: Bearer $SECRET" -H "Content-Type: application/json" \
   -d '{"userId":"<db user id>","notification":{"id":"1","type":"test","title":"hi","message":"hi"}}'
 
 # Wrong secret should return 401
-curl -s -o /dev/null -w "%{http_code}\n" -X POST https://xxxx.cloudfront.net/api/notify \
+curl -s -o /dev/null -w "%{http_code}\n" -X POST https://api.sse-notifs.com/api/notify \
   -H "Authorization: Bearer wrong" -H "Content-Type: application/json" -d '{}'
 ```
 

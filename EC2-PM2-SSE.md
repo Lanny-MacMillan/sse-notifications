@@ -109,10 +109,10 @@ curl -N http://localhost:4000/health
 
 ### From External (Local Machine/Postman)
 
-Port 4000 is only open to CloudFront, so test through the CloudFront URL:
+Port 4000 is only open to CloudFront, so test through the public URL:
 
 ```bash
-GET https://<distribution>.cloudfront.net/health
+GET https://api.sse-notifs.com/health
 ```
 
 ## Troubleshooting
