@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { connectionManager } from '../services/connections';
+import { authenticateApiKey } from '../middleware/auth';
 import type { HealthStatus } from '../types';
 
 const router = Router();
@@ -31,22 +32,6 @@ router.get('/health', (req: Request, res: Response) => {
       },
       timestamp: new Date().toISOString(),
     };
-
-    // Add detailed connection info if requested
-    if (req.query.detailed === 'true') {
-      (healthStatus as any).connectionDetails = {
-        activeUsers: connectionStats.activeUsers,
-        userConnections: connectionStats.userStats.map(user => ({
-          userId: user.userId,
-          connectionCount: user.connectionCount,
-          connections: user.info.map(info => ({
-            connectedAt: info.connectedAt,
-            lastHeartbeat: info.lastHeartbeat,
-            clientInfo: info.clientInfo,
-          })),
-        })),
-      };
-    }
 
     // Add environment info if in development
     if (process.env.NODE_ENV === 'development') {
@@ -85,8 +70,9 @@ router.get('/health', (req: Request, res: Response) => {
 /**
  * Detailed system status endpoint (for monitoring)
  * GET /health/detailed
+ * Requires the internal API key: exposes user IDs and connection stats
  */
-router.get('/health/detailed', (req: Request, res: Response) => {
+router.get('/health/detailed', authenticateApiKey, (req: Request, res: Response) => {
   try {
     const memoryUsage = process.memoryUsage();
     const cpuUsage = process.cpuUsage();

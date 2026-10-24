@@ -86,7 +86,7 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ SSE Server running on port ${PORT}`);
   console.log(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`✅ Health check: http://localhost:${PORT}/health`);
-  console.log(`✅ Detailed status: http://localhost:${PORT}/health/detailed`);
+  console.log(`✅ Detailed status (API key required): http://localhost:${PORT}/health/detailed`);
   
   if (process.env.NODE_ENV === 'development') {
     console.log(`SSE endpoint: http://localhost:${PORT}/stream?auth0Sub=<your_auth0_sub>`);
