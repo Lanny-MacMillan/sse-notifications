@@ -387,7 +387,7 @@ GET /health
 - `POST /api/notifications/read` - Mark notifications as read
 - `POST /api/notifications/dismiss` - Dismiss notifications
 - `GET /health` - Basic health status
-- `GET /health/detailed` - Detailed system status with connection metrics
+- `GET /health/detailed` - Detailed system status with connection metrics (requires `Authorization: Bearer <API_SECRET>`)
 
 ---
 

@@ -43,8 +43,12 @@ export const authenticateUser = async (req: Request, res: Response, next: NextFu
       },
     });
 
-    // Create test user for development if not found and matches test patterns
-    if (!user && (auth0Sub.includes('test') || auth0Sub.includes('google-oauth2'))) {
+    // Create test user for development only. Never auto-provision accounts in production.
+    if (
+      !user &&
+      process.env.NODE_ENV !== 'production' &&
+      (auth0Sub.includes('test') || auth0Sub.includes('google-oauth2'))
+    ) {
       console.log(`Creating test user for auth0Sub: ${auth0Sub}`);
       
       user = await prisma.user.create({
