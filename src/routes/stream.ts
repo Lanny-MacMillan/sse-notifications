@@ -6,9 +6,9 @@ const router = Router();
 
 /**
  * SSE Stream endpoint
- * GET /stream?auth0Sub=<auth0_sub>
+ * GET /stream?ticket=<signed ticket from the app>
  */
-router.get('/stream', rateLimitSSE, authenticateUser, (req: Request, res: Response) => {
+router.get('/stream', authenticateUser, rateLimitSSE, (req: Request, res: Response) => {
   try {
     // user is guaranteed to exist after authenticateUser middleware
     const user = req.user!; 

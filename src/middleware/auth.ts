@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { prisma } from '../lib/prisma';
 import type { AuthUser } from '../types';
+import { verifyStreamTicket } from '../lib/streamTicket';
 
 // Extend Request interface to include user
 declare global {
@@ -11,97 +12,122 @@ declare global {
   }
 }
 
-/**
- * Authentication middleware for SSE service
- * Validates auth0Sub parameter and fetches user data
- */
-export const authenticateUser = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    const auth0Sub = req.query.auth0Sub as string;
+type FoundUser = {
+  id: string;
+  auth0Sub: string;
+  email: string | null;
+  name: string | null;
+  picture: string | null;
+  subscriptionPlan: AuthUser['subscriptionPlan'];
+};
 
-    if (!auth0Sub) {
-      res.status(401).json({
-        error: 'Authentication required',
-        message: 'Missing auth0Sub parameter',
-      });
-      return;
-    }
+const userSelect = {
+  id: true,
+  auth0Sub: true,
+  email: true,
+  name: true,
+  picture: true,
+  subscriptionPlan: true,
+  subscriptionStartDate: true,
+  subscriptionEndDate: true,
+  createdAt: true,
+} as const;
 
-    // Look up user by auth0Sub
-    let user = await prisma.user.findUnique({
-      where: { auth0Sub },
-      select: {
-        id: true,
-        auth0Sub: true,
-        email: true,
-        name: true,
-        picture: true,
-        subscriptionPlan: true,
-        subscriptionStartDate: true,
-        subscriptionEndDate: true,
-        createdAt: true,
+async function loadUserByAuth0Sub(auth0Sub: string): Promise<FoundUser | null> {
+  const user = await prisma.user.findUnique({ where: { auth0Sub }, select: userSelect });
+  if (user) return user;
+
+  // Create test user for development only. Never auto-provision accounts in production.
+  if (
+    process.env.NODE_ENV !== 'production' &&
+    (auth0Sub.includes('test') || auth0Sub.includes('google-oauth2'))
+  ) {
+    console.log(`Creating test user for auth0Sub: ${auth0Sub}`);
+
+    return prisma.user.create({
+      data: {
+        auth0Sub,
+        email: `test-${Date.now()}@example.com`,
+        name: `Test User ${auth0Sub.slice(-6)}`,
+        picture: null,
+        subscriptionPlan: 'plus', // Give test users plus subscription
+        subscriptionStartDate: new Date(),
+        subscriptionEndDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year
       },
-    });
-
-    // Create test user for development only. Never auto-provision accounts in production.
-    if (
-      !user &&
-      process.env.NODE_ENV !== 'production' &&
-      (auth0Sub.includes('test') || auth0Sub.includes('google-oauth2'))
-    ) {
-      console.log(`Creating test user for auth0Sub: ${auth0Sub}`);
-      
-      user = await prisma.user.create({
-        data: {
-          auth0Sub,
-          email: `test-${Date.now()}@example.com`,
-          name: `Test User ${auth0Sub.slice(-6)}`,
-          picture: null,
-          subscriptionPlan: 'plus', // Give test users plus subscription
-          subscriptionStartDate: new Date(),
-          subscriptionEndDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year
-        },
-        select: {
-          id: true,
-          auth0Sub: true,
-          email: true,
-          name: true,
-          picture: true,
-          subscriptionPlan: true,
-          subscriptionStartDate: true,
-          subscriptionEndDate: true,
-          createdAt: true,
-        },
-      });
-    }
-
-    if (!user) {
-      res.status(401).json({
-        error: 'User not found',
-        message: 'Invalid auth0Sub or user does not exist',
-      });
-      return;
-    }
-
-    // Add user to request object
-    req.user = {
-      id: user.id,
-      auth0Sub: user.auth0Sub,
-      email: user.email || undefined,
-      name: user.name || undefined,
-      picture: user.picture || undefined,
-      subscriptionPlan: user.subscriptionPlan,
-    };
-
-    next();
-  } catch (error) {
-    console.error('Authentication error:', error);
-    res.status(500).json({
-      error: 'Authentication failed',
-      message: 'Internal server error during authentication',
+      select: userSelect,
     });
   }
-};
+
+  return null;
+}
+
+/**
+ * Authenticates a stream request from the signed, short-lived ticket the app
+ * issues to a logged-in user. The user id in the URL is never trusted.
+ */
+export const createAuthenticateUser =
+  (loadUser: (auth0Sub: string) => Promise<FoundUser | null>) =>
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const secret = process.env.API_SECRET;
+      if (!secret) {
+        console.error('API_SECRET environment variable not set');
+        res.status(500).json({
+          error: 'Server configuration error',
+          message: 'Authentication not properly configured',
+        });
+        return;
+      }
+
+      const ticket = req.query.ticket;
+      if (typeof ticket !== 'string' || !ticket) {
+        res.status(401).json({
+          error: 'Authentication required',
+          message: 'Missing stream ticket',
+        });
+        return;
+      }
+
+      let auth0Sub: string;
+      try {
+        auth0Sub = await verifyStreamTicket(ticket, secret);
+      } catch {
+        res.status(401).json({
+          error: 'Authentication required',
+          message: 'Invalid or expired stream ticket',
+        });
+        return;
+      }
+
+      const user = await loadUser(auth0Sub);
+      if (!user) {
+        res.status(401).json({
+          error: 'User not found',
+          message: 'No user exists for this ticket',
+        });
+        return;
+      }
+
+      req.user = {
+        id: user.id,
+        auth0Sub: user.auth0Sub,
+        email: user.email || undefined,
+        name: user.name || undefined,
+        picture: user.picture || undefined,
+        subscriptionPlan: user.subscriptionPlan,
+      };
+
+      next();
+    } catch (error) {
+      console.error('Authentication error:', error);
+      res.status(500).json({
+        error: 'Authentication failed',
+        message: 'Internal server error during authentication',
+      });
+    }
+  };
+
+export const authenticateUser = createAuthenticateUser(loadUserByAuth0Sub);
 
 /**
  * API key authentication middleware for internal endpoints
@@ -154,8 +180,7 @@ const connectionAttempts = new Map<string, { count: number; resetTime: number }>
 
 export const rateLimitSSE = (req: Request, res: Response, next: NextFunction): void => {
   const clientIP = req.ip || req.connection.remoteAddress || 'unknown';
-  const auth0Sub = req.query.auth0Sub as string;
-  const key = `${clientIP}:${auth0Sub}`;
+  const key = `${clientIP}:${req.user?.auth0Sub ?? 'anonymous'}`;
   
   const now = Date.now();
   const windowMs = 60 * 1000; // 1 minute window
