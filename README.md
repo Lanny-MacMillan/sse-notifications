@@ -71,8 +71,8 @@ npm run prisma:generate
 # Start development server
 npm run dev
 
-# Test connection
-curl -N "http://localhost:4000/stream?auth0Sub=test|123"
+# Test connection (see "Stream authentication" for how to get a ticket)
+curl -N "http://localhost:4000/stream?ticket=$TICKET"
 ```
 
 The service will be running at `http://localhost:4000`. See [Installation](#️-installation) for detailed setup.
@@ -122,7 +122,7 @@ Instead of compromising on real-time notifications or forcing users to constantl
 
 ### How It Works in Practice
 
-1. **User connects**: Browser establishes SSE connection to this service via `/stream?auth0Sub=<user_id>`
+1. **User connects**: Browser establishes SSE connection to this service via `/stream?ticket=<ticket>`, using a short-lived ticket the app issues to the logged-in user
 2. **Main app triggers**: When someone likes your holiday or comments, Next-holiday saves notification to database
 3. **Real-time delivery**: Next-holiday calls this service's `/api/notify` endpoint
 4. **Instant notification**: Service pushes notification through active SSE connection to user's browser
@@ -284,9 +284,10 @@ When a user takes an action in Next-holiday (e.g., likes a holiday, adds a comme
 The Next-holiday app establishes an SSE connection when users log in:
 
 ```typescript
-// In Next-holiday: components/NotificationProvider.tsx
+// In Next-holiday: components/common/NotificationCenter.tsx
+const { ticket } = await (await fetch('/api/sse-ticket', { method: 'POST' })).json();
 const eventSource = new EventSource(
-  `${process.env.NEXT_PUBLIC_SSE_URL}/stream?auth0Sub=${user.auth0Sub}`,
+  `${process.env.NEXT_PUBLIC_SSE_SERVICE_URL}/stream?ticket=${ticket}`,
 );
 
 eventSource.onmessage = (event) => {
@@ -311,14 +312,31 @@ eventSource.onerror = () => {
 ### SSE Stream Connection
 
 ```
-GET /stream?auth0Sub=<auth0_sub>
+GET /stream?ticket=<ticket>
 ```
 
 Establishes persistent SSE connection for real-time notifications.
 
 **Parameters:**
 
-- `auth0Sub` (required): User's Auth0 subject ID
+- `ticket` (required): signed, short-lived ticket for the logged-in user. Any `auth0Sub` in the URL is ignored.
+
+**Stream authentication:**
+
+The app issues the ticket from `POST /api/sse-ticket` after verifying the user's login. It is an HS256 JWT signed with the secret both services share (`SSE_API_SECRET` in the app, `API_SECRET` here), with audience `sse-stream`, the user's Auth0 id as `sub`, and a lifetime of about 60 seconds. The service verifies the signature and expiry and takes the identity from `sub`. A missing, invalid or expired ticket gets a `401`.
+
+For manual testing, generate one with the shared secret:
+
+```bash
+export API_SECRET=<the value from .env>
+TICKET=$(node -e "
+const { SignJWT } = require('jose');
+new SignJWT({}).setProtectedHeader({ alg: 'HS256' }).setSubject('auth0|test')
+  .setAudience('sse-stream').setIssuedAt().setExpirationTime('60s')
+  .sign(new TextEncoder().encode(process.env.API_SECRET)).then(console.log);
+")
+curl -N "http://localhost:4000/stream?ticket=$TICKET"
+```
 
 **Response:** `text/event-stream`
 
@@ -495,7 +513,7 @@ Create a distribution with the instance's public DNS as a custom origin:
 - **Viewer protocol policy:** redirect HTTP to HTTPS
 - **Allowed methods:** GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE
 - **Cache policy:** `CachingDisabled` (`4135ea2d-6df8-44a3-9df3-4b5a84be39ad`)
-- **Origin request policy:** `AllViewer` (`216adef6-5c7f-47e4-b989-5492eafa07d3`), which forwards the `auth0Sub` query string, `Origin` and `Authorization`
+- **Origin request policy:** `AllViewer` (`216adef6-5c7f-47e4-b989-5492eafa07d3`), which forwards the `ticket` query string, `Origin` and `Authorization`
 - **Compression:** off
 
 The distribution's `https://xxxx.cloudfront.net` domain works as the public URL. For a cleaner production URL, attach a custom domain (e.g. `https://api.sse-notifs.com`): request an ACM certificate in `us-east-1`, add the domain as an alternate domain name on the distribution, and point a DNS `CNAME` at the `cloudfront.net` domain. The examples below use `https://api.sse-notifs.com`.
@@ -516,7 +534,7 @@ SSE_API_SECRET=<same value as API_SECRET on the server>
 
 ```bash
 # Terminal 1: stays open, prints a connection message with your DB userId, then heartbeats
-curl -N "https://api.sse-notifs.com/stream?auth0Sub=auth0%7Ctest"
+curl -N "https://api.sse-notifs.com/stream?ticket=$TICKET"
 
 # Terminal 2: userId is the DB id from the connection message, not the auth0 sub
 curl -X POST https://api.sse-notifs.com/api/notify \
@@ -717,7 +735,7 @@ Monitor these key metrics:
 ```bash
 # Test SSE connection
 curl -N -H "Accept: text/event-stream" \
-  "http://localhost:4000/stream?auth0Sub=test|123"
+  "http://localhost:4000/stream?ticket=$TICKET"
 
 # Test notification sending
 curl -X POST http://localhost:4000/api/notify \
@@ -747,7 +765,8 @@ curl http://localhost:4000/health
 
 **Authentication Failures:**
 
-- Verify auth0Sub parameter format
+- Tickets last about 60 seconds; request a fresh one if you get a `401`
+- Check `API_SECRET` here matches `SSE_API_SECRET` in the app
 - Check if user exists in database
 - Validate API secret for internal calls
 
