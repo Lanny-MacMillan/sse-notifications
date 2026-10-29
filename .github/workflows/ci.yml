@@ -9,6 +9,9 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  DATABASE_URL: mysql://ci:ci@localhost:3306/ci
+
 jobs:
   check:
     runs-on: ubuntu-latest
